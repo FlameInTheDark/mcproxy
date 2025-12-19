@@ -48,7 +48,10 @@ server:
     *   **env**: (Stdio only) Environment variables (KEY=VALUE).
     *   **url**: (SSE/HTTP only) The URL of the upstream SSE endpoint.
 *   **server**: Global server settings.
-    *   **port**: The TCP port the proxy listens on.
+    *   **port**: The TCP port the proxy listens on (used when transport is `http`).
+    *   **transport**: The mode of operation for the proxy.
+        *   `http` (default): Runs an HTTP server exposing SSE endpoints.
+        *   `stdio`: Runs as a command-line tool, communicating via Standard Input/Output. This allows the proxy itself to be used as a "tool" by other MCP clients (like Claude Desktop).
 
 ## Usage
 
