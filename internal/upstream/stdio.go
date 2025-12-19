@@ -69,12 +69,9 @@ func (c *StdioClient) Start(ctx context.Context) error {
 	c.running = true
 	c.logger.Info("Stdio upstream started", "cmd", c.cmd.Path, "args", c.cmd.Args)
 
-	// stdout reader
 	go c.readLoop(c.stdout, "stdout")
-	// stderr reader
 	go c.readStderr(c.stderr)
 
-	// monitor process exit
 	go func() {
 		err := c.cmd.Wait()
 		if err != nil {
@@ -90,15 +87,12 @@ func (c *StdioClient) Start(ctx context.Context) error {
 
 func (c *StdioClient) readLoop(r io.Reader, name string) {
 	scanner := bufio.NewScanner(r)
-	// Increase buffer size if necessary, but default 64k is usually okay for chunks.
-	// MCP messages can be large, so we might need a larger buffer.
 	const maxCapacity = 10 * 1024 * 1024 // 10MB
 	buf := make([]byte, maxCapacity)
 	scanner.Buffer(buf, maxCapacity)
 
 	for scanner.Scan() {
 		msg := scanner.Bytes()
-		// Make a copy because scanner reuses the buffer
 		msgCopy := make([]byte, len(msg))
 		copy(msgCopy, msg)
 
@@ -127,7 +121,6 @@ func (c *StdioClient) Send(ctx context.Context, msg Message) error {
 		return fmt.Errorf("client not running")
 	}
 
-	// Append newline as required by MCP stdio transport
 	_, err := c.stdin.Write(append(msg, '\n'))
 	return err
 }

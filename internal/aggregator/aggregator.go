@@ -93,29 +93,6 @@ func (a *Aggregator) handleInitialize(ctx context.Context, msg mcp.JSONRPCMessag
 		return a.jsonRPCError(msg.ID, -32700, "Invalid params"), nil
 	}
 
-	// We simply return a success response claiming we are the proxy.
-	// We do NOT handshake with upstreams here yet, because they might already be running
-	// or we might want to lazy load.
-	// Actually, `upstream.Client.Start()` is called by `Server.Start()`, so they are running.
-	// Ideally, we should initialize them now using the client's capabilities?
-	// But upstreams are shared! If another client connects, we can't re-initialize.
-	// Assumption: Upstreams are initialized once or use default.
-	// But MCP requires per-connection initialization.
-	// Since `upstream.Client` (Stdio) is a single process, it expects one init.
-	// Since `upstream.Client` (SSE) is HTTP, it might be stateless or session-based.
-	//
-	// CRITICAL: Stdio processes are 1-to-1. If we have multiple clients connecting to the Proxy,
-	// and the Proxy shares one Stdio process, the state is shared.
-	// This "Shared Proxy" model implies the Proxy is the "Client" to the Upstream,
-	// and the Proxy is the "Server" to the Downstream users.
-	// The Proxy should initialize the Upstream ONCE when it starts.
-
-	// FIXME: We haven't initialized the upstreams in `Server.Start`.
-	// For this prototype, let's assume upstreams are lenient or we accept that
-	// we initialize them on the first request?
-	// Better: The Aggregator shouldn't forward `initialize` blindly.
-	// It should just return its OWN capabilities.
-
 	result := mcp.InitializeResult{
 		ProtocolVersion: "2024-11-05",
 		Capabilities:    json.RawMessage(`{"tools":{}}`), // We support tools
@@ -135,16 +112,9 @@ func (a *Aggregator) handleInitialize(ctx context.Context, msg mcp.JSONRPCMessag
 func (a *Aggregator) handleListTools(ctx context.Context, msg mcp.JSONRPCMessage) ([]byte, error) {
 	var allTools []mcp.Tool
 
-	// Query all upstreams
-	// This assumes upstreams are already initialized!
-	// If they are not, `Call` might fail or they might error.
-	// We'll proceed assuming they respond.
-
-	// We need to sync this to populate `toolMap`
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	// Clear old map
 	a.toolMap = make(map[string]string)
 
 	var wg sync.WaitGroup

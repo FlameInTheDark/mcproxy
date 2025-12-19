@@ -1,6 +1,8 @@
 package transport
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,33 +20,64 @@ func (s *Server) handleAggregatedSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create Session
+	sessionID := generateSessionID()
+	msgChan := make(chan []byte, 100)
+
+	s.sessionsMu.Lock()
+	s.sessions[sessionID] = msgChan
+	s.sessionsMu.Unlock()
+
+	defer func() {
+		s.sessionsMu.Lock()
+		delete(s.sessions, sessionID)
+		s.sessionsMu.Unlock()
+		s.logger.Info("Aggregated SSE session ended", "sessionID", sessionID)
+	}()
+
 	scheme := "http"
+
 	if r.TLS != nil {
+
 		scheme = "https"
+
 	}
-	endpoint := fmt.Sprintf("%s://%s/messages", scheme, r.Host)
+
+	endpoint := fmt.Sprintf("%s://%s/messages?sessionID=%s", scheme, r.Host, sessionID)
 
 	fmt.Fprintf(w, "event: endpoint\ndata: %s\n\n", endpoint)
+
 	flusher.Flush()
 
-	s.logger.Info("Client connected to Aggregated SSE")
+	s.logger.Info("Client connected to Aggregated SSE", "sessionID", sessionID)
 
 	ctx := r.Context()
 	for {
 		select {
-		case msg := <-s.aggregatorUpdates:
-			// Forward message
-			// Simple SSE format: event: message\ndata: <json>\n\n
+		case msg := <-msgChan:
 			fmt.Fprintf(w, "event: message\ndata: %s\n\n", msg)
 			flusher.Flush()
 		case <-ctx.Done():
-			s.logger.Info("Client disconnected from Aggregated SSE")
 			return
 		}
 	}
 }
 
 func (s *Server) handleAggregatedMessage(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.URL.Query().Get("sessionID")
+	if sessionID == "" {
+		http.Error(w, "Missing sessionID", http.StatusBadRequest)
+		return
+	}
+
+	s.sessionsMu.RLock()
+	msgChan, ok := s.sessions[sessionID]
+	s.sessionsMu.RUnlock()
+
+	if !ok {
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -61,9 +94,19 @@ func (s *Server) handleAggregatedMessage(w http.ResponseWriter, r *http.Request)
 	}
 
 	if resp != nil {
-		s.logger.Warn("Aggregated mode: Sending response to ALL connected clients (Single User assumption)")
-		s.aggregatorUpdates <- resp
+		// Route response to the specific session
+		select {
+		case msgChan <- resp:
+		default:
+			s.logger.Warn("Session buffer full, dropping message", "sessionID", sessionID)
+		}
 	}
 
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func generateSessionID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }

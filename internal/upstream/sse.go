@@ -90,7 +90,6 @@ func (c *SSEClient) readLoop(r io.Reader) {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Empty line dispatch event
 		if line == "" {
 			if dataBuffer.Len() > 0 {
 				c.handleEvent(eventType, dataBuffer.Bytes())
@@ -101,7 +100,6 @@ func (c *SSEClient) readLoop(r io.Reader) {
 		}
 
 		if strings.HasPrefix(line, ":") {
-			// Comment, ignore
 			continue
 		}
 
@@ -135,7 +133,6 @@ func (c *SSEClient) handleEvent(eventType string, data []byte) {
 	case "endpoint":
 		endpoint := string(data)
 
-		// Resolve relative URL if necessary
 		u, err := url.Parse(endpoint)
 		if err != nil {
 			c.logger.Error("Invalid endpoint URL received", "endpoint", endpoint, "error", err)
@@ -162,8 +159,6 @@ func (c *SSEClient) handleEvent(eventType string, data []byte) {
 		}
 
 	case "message":
-		// Check if it's a valid message, maybe parse minimal JSON?
-		// For now, just forward raw bytes
 		msgCopy := make([]byte, len(data))
 		copy(msgCopy, data)
 
@@ -173,7 +168,6 @@ func (c *SSEClient) handleEvent(eventType string, data []byte) {
 		}
 
 	default:
-		// Default to message if event type is empty (common in some SSE impls)
 		if eventType == "" && len(data) > 0 {
 			msgCopy := make([]byte, len(data))
 			copy(msgCopy, data)
@@ -186,7 +180,6 @@ func (c *SSEClient) handleEvent(eventType string, data []byte) {
 }
 
 func (c *SSEClient) Send(ctx context.Context, msg Message) error {
-	// Wait for initialization
 	select {
 	case <-c.initialized:
 	case <-ctx.Done():

@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"sync"
+
 	"github.com/FlameInTheDark/mcproxy/internal/aggregator"
 	"github.com/FlameInTheDark/mcproxy/internal/config"
 	"github.com/FlameInTheDark/mcproxy/internal/mcp"
@@ -30,13 +32,16 @@ func DefaultClientFactory(cfg config.ServerConfig, logger *slog.Logger) (upstrea
 }
 
 type Server struct {
-	upstreams         map[string]upstream.Client
-	clients           map[string]*mcp.Client
-	aggregator        *aggregator.Aggregator
-	aggregatorUpdates chan []byte
-	logger            *slog.Logger
-	port              int
-	transport         string
+	upstreams  map[string]upstream.Client
+	clients    map[string]*mcp.Client
+	aggregator *aggregator.Aggregator
+	logger     *slog.Logger
+	port       int
+	transport  string
+
+	// Session Management
+	sessionsMu sync.RWMutex
+	sessions   map[string]chan []byte
 }
 
 func NewServer(cfg *config.Config, logger *slog.Logger, factory ClientFactory) (*Server, error) {
@@ -48,12 +53,12 @@ func NewServer(cfg *config.Config, logger *slog.Logger, factory ClientFactory) (
 	}
 
 	s := &Server{
-		upstreams:         make(map[string]upstream.Client),
-		clients:           make(map[string]*mcp.Client),
-		aggregatorUpdates: make(chan []byte, 100), // Buffer for safety
-		logger:            logger,
-		port:              cfg.Server.Port,
-		transport:         cfg.Server.Transport,
+		upstreams: make(map[string]upstream.Client),
+		clients:   make(map[string]*mcp.Client),
+		sessions:  make(map[string]chan []byte),
+		logger:    logger,
+		port:      cfg.Server.Port,
+		transport: cfg.Server.Transport,
 	}
 
 	for _, srvCfg := range cfg.MCPServers {
@@ -129,7 +134,7 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	serverName := r.PathValue("server")
-	client, ok := s.clients[serverName] // Use wrapped client
+	client, ok := s.clients[serverName]
 	if !ok {
 		http.Error(w, "Server not found", http.StatusNotFound)
 		return

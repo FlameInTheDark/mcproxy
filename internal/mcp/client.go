@@ -50,7 +50,6 @@ func (c *Client) readLoop() {
 			var msg JSONRPCMessage
 			if err := json.Unmarshal(msgBytes, &msg); err != nil {
 				c.logger.Error("Failed to unmarshal upstream message", "error", err)
-				// Forward corrupted/unknown messages too? Yes, let downstream handle or see it.
 				select {
 				case c.passthrough <- msgBytes:
 				case <-c.done:
@@ -59,7 +58,6 @@ func (c *Client) readLoop() {
 				continue
 			}
 
-			// If it has an ID, check if it's a response to a pending request
 			if msg.ID != nil {
 				idStr := fmt.Sprintf("%v", msg.ID)
 				c.pendingMu.Lock()
@@ -84,7 +82,6 @@ func (c *Client) readLoop() {
 				c.pendingMu.Unlock()
 			}
 
-			// Otherwise treat as notification or request from server to client
 			select {
 			case c.passthrough <- msgBytes:
 			case <-c.done:
@@ -132,7 +129,6 @@ func (c *Client) Call(ctx context.Context, method string, params interface{}) (*
 	c.pending[idStr] = respCh
 	c.pendingMu.Unlock()
 
-	// Ensure cleanup if context cancelled or send failed
 	defer func() {
 		c.pendingMu.Lock()
 		delete(c.pending, idStr)

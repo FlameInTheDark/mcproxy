@@ -48,22 +48,6 @@ func TestServerFlow(t *testing.T) {
 		t.Fatalf("NewServer failed: %v", err)
 	}
 
-	// Start server in background?
-	// Actually we can just call handleSSE / handleMessage directly or via httptest.Server
-	// But `Start` sets up the mux. Let's use `Start` but in a way we can access the mux or just trust integration.
-	// Since `Start` blocks, we'll run it in a goroutine, but we don't know the port if 0.
-	// We'll trust `Start` works and test handlers via `httptest` if we exposed the handler.
-	// But `Start` creates the server and mux internally.
-	// Let's modify `Start` or just `Server` to expose `Handler`?
-	// For now, let's just make `NewServer` NOT start the listeners, just setup logic?
-	// No, `Start` does everything.
-	// I'll test via `httptest` by creating a new mux with the same handlers manually for this test
-	// OR (better) Refactor Server to expose Handler.
-
-	// Let's just create a test mux and call the handlers directly which are methods on Server.
-	// We need to route the request properly for `PathValue` to work (Go 1.22+).
-	// `http.ServeMux` handles parsing PathValue.
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /mcp/{server}/sse", srv.handleSSE)
 	mux.HandleFunc("POST /mcp/{server}/messages", srv.handleMessage)
@@ -106,9 +90,6 @@ func TestServerFlow(t *testing.T) {
 	reader.ReadString('\n') // Empty line
 
 	// 2. Send Message (POST)
-	// endpointURL is likely absolute if we implemented it right,
-	// but `httptest` uses random ports. Our handler constructs it using `r.Host`.
-	// Verify endpoint URL matches expectation.
 	if !strings.Contains(endpointURL, "/mcp/test/messages") {
 		t.Errorf("Unexpected endpoint: %s", endpointURL)
 	}
