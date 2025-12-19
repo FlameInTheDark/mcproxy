@@ -1,0 +1,16 @@
+mcpServers:
+  - name: "filesystem"
+    type: "stdio"
+    command: "npx"
+    args: 
+      - "-y"
+      - "@modelcontextprotocol/server-filesystem"
+      - "."
+  # Example SSE upstream
+  # - name: "remote-tool"
+  #   type: "sse"
+  #   url: "http://other-host:8000/sse"
+
+server:
+  port: 8080
+  transport: "http" # "http" or "stdio"
